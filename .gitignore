@@ -1,0 +1,42 @@
+# ==============================================================================
+# THE AGENTIC ENGINEER - AUTOMATED LAYOUT ENGINE SYSTEM GITIGNORE
+# ==============================================================================
+
+# 1. Local Python Environment Elements
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# 2. Local AI Model Architecture Weights (Do not push heavy models to GitHub)
+*.onnx
+*.bin
+models/
+
+# 3. Media Pipeline Inputs, Intermediates, & Master Output Cache
+output/
+outputs/
+render/
+temp/
+inputs/
+assets/
+audio/narration/
+
+# Ignore alternative video manifest variants unless explicit production templates
+video_manifest.json
+video_manifest_ep*.json
+!video_manifest_template.json
+!video_manifest_ep2.json
+
+# 4. Local Documentation Scratchpads & Logs
+context.md
+todo.md
+engineering_log.md
+*.m4a
+
+# 5. Operating System Clutter
+.DS_Store
+Thumbs.db

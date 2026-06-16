@@ -1,0 +1,76 @@
+{
+  "project_name": "The Agentic Engineer - Episode 2: Cloud Telemetry Anomaly Engine",
+  "meta": {
+    "resolution": [1920, 1080],
+    "fps": 30,
+    "total_duration": 60.0
+  },
+  "audio_tracks": {
+    "background_music": {
+      "source": "music/track1.mp3",
+      "base_volume": 0.05
+    }
+  },
+  "timeline": [
+    {
+      "act": 1,
+      "start_time": 0.0,
+      "end_time": 15.0,
+      "narration_text": "Welcome back to The Agentic Engineer. In enterprise data infrastructure, the scariest bills are not the ones you expect. They are the silent cloud log cost anomalies that slide past static budget thresholds. As a data analyst, I have seen how manual oversight lets these leaks drain thousands before anyone notices.",
+      "visuals": {
+        "background": {
+          "type": "video",
+          "source": "video_production/raw video/intro_for_agv2.mp4"
+        }
+      }
+    },
+    {
+      "act": 2,
+      "start_time": 15.0,
+      "end_time": 35.0,
+      "narration_text": "In this build, we are fixing that by deploying an automated data pipeline that acts as a financial sentinel. Instead of hardcoding brittle alert thresholds, our Python backend ingests raw infrastructure logs dynamically. We are applying a rolling Z score algorithm across our daily spend metrics.",
+      "visuals": {
+        "background": {
+          "type": "chart_sequence",
+          "source": "output/chart_frames"
+        }
+      }
+    },
+    {
+      "act": 3,
+      "start_time": 35.0,
+      "end_time": 50.0,
+      "narration_text": "By calculating a moving mean and standard deviation, the engine establishes a fluid baseline. The second the log data hits a statistical outlier, our data contract flags it. When the timeline hits our anomaly mark, the system violently triggers a Z score alert, shifting the graph color to warning cyan.",
+      "visuals": {
+        "background": {
+          "type": "chart_sequence",
+          "source": "output/chart_frames"
+        }
+      },
+      "data_overlays": [
+        {
+          "overlay_type": "anomaly_alert",
+          "trigger_time": 38.0,
+          "duration": 5.0,
+          "z_score": 3.12,
+          "ui_color": "cyan",
+          "effects": {
+            "glitch_shake": true
+          }
+        }
+      ]
+    },
+    {
+      "act": 4,
+      "start_time": 50.0,
+      "end_time": 60.0,
+      "narration_text": "When MoviePy chokes on complex environment setups, do not waste time patching upstream library bugs. We refactored the pipeline to use an OpenCV compilation bridge, accelerating our frame processing directly. Build modular architectures bound by strict data contracts. See you in the next build.",
+      "visuals": {
+        "background": {
+          "type": "video",
+          "source": "video_production/raw video/running_my_code_agv2.mp4"
+        }
+      }
+    }
+  ]
+}

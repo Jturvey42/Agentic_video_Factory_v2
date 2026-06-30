@@ -37,17 +37,14 @@ if sys.platform == "win32":
 # Now safe to import pipeline components that spawn FFMPEG workers
 from src.timeline_compiler import MoviePyTimelineCompiler
 from src.chart_overlay_engine import TelemetryChartEngine
+from src.goal_tracker_ui import generate_polished_hud
 
 def main():
     # --------------------------------------------------------------------------
     # CONFIGURATION CONTROL PANEL
     # --------------------------------------------------------------------------
-    # Change EPISODE_NUM to instantly target alternate manifests or scripts
-    EPISODE_NUM = 2
-    
-    # Chart generation constants
-    TOTAL_CHART_STEPS = 30       # Matching chronological steps for data timeline
-    ANOMALY_INDEX = 23          # Index location where the Z-score anomaly spikes
+    # TARGETING EPISODE 3 (Global Supply Shock Engine)
+    EPISODE_NUM = 3 
     
     print(f"=== STARTING PHASE 3: EPISODE {EPISODE_NUM} CONTENT ASSEMBLY INTEGRATION ===")
     
@@ -64,17 +61,17 @@ def main():
         
     print(f"[INFO] Verified data contract manifest at: {manifest_path}")
 
+    # Load the manifest data layout explicitly
+    with open(manifest_path, 'r', encoding='utf-8') as f:
+        manifest_data = json.load(f)
+
     # ==============================================================================
-    # PHASE 1: AUTOMATED NARRATION BUILDER & ASSET ALIGNMENT
+    # PHASE 1: AUTOMATED NARRATION BUILDER & GOAL TRACKER HUD ENGINE
     # ==============================================================================
-    print("\n=== GENERATING SANITIZED NARRATION AUDIO TRACKS ===")
+    print("\n=== GENERATING SANITIZED NARRATION AUDIO & MILESTONE HUD FRAMES ===")
     try:
         from tools import generate_scene_audio  
         
-        # Load the manifest data layout explicitly
-        with open(manifest_path, 'r', encoding='utf-8') as f:
-            manifest_data = json.load(f)
-            
         narration_output_dir = os.path.join(base_dir, "audio", "narration")
         os.makedirs(narration_output_dir, exist_ok=True)
         
@@ -87,75 +84,114 @@ def main():
                 except Exception: 
                     pass
         
-        # Loop through acts and feed matching text parameters to Kokoro
-        for item in manifest_data["timeline"]:
-            act = item["act"]
-            text = item["narration_text"]
-            wav_name = f"ep2_act_{act}_narration.wav"
+        milestones = manifest_data.get("milestones", [])
+        scenes = manifest_data.get("scenes", [])
+        
+        # Loop through Episode 3's Scenes array 
+        for scene in scenes:
+            scene_id = scene["scene_id"]
+            title = scene["title"]
+            text = scene["audio_script"]
+            active_milestone_id = scene["visual_layers"]["hud_highlight"]
+            
+            print(f"\n[➔] Processing Scene {scene_id}: {title}")
+            
+            # --- PART A: AUDIO GENERATION ---
+            wav_name = f"ep3_{scene_id}_narration.wav"
             wav_path = os.path.join(narration_output_dir, wav_name)
             
-            print(f" -> Processing Act {act} audio pipeline...")
+            numeric_id = int(''.join(filter(str.isdigit, scene_id)))
+            temp_generated_path = generate_scene_audio(act_id=numeric_id, narration_text=text)
             
-            # CRITICAL FIX: Aligning variables directly to the function signature
-            # generate_scene_audio expects: (act_id: int, narration_text: str)
-            temp_generated_path = generate_scene_audio(act_id=int(act), narration_text=text)
-            
-            # ASSET RUNTIME ROUTING: Safely migrate Kokoro's output to the compiler's expected dir
             if os.path.exists(temp_generated_path):
                 shutil.move(temp_generated_path, wav_path)
-                print(f"    [SUCCESS] Audio tracked moved to target destination: {wav_path}")
+                print(f"    [SUCCESS] Audio tracked moved to: {wav_path}")
             else:
                 raise FileNotFoundError(f"Expected generated asset not found at {temp_generated_path}")
             
-        print("[SUCCESS] Fresh, clean narration tracks generated and locked.")
-    except Exception as audio_err:
-        print(f"[CRITICAL FAILURE] Voice synthesis module run failed: {str(audio_err)}")
+            # --- PART B: DYNAMIC TEMP MANIFEST GENERATION ---
+            print(f"    [HUD] Mutating state structure for focus target: {active_milestone_id}")
+            mutated_milestones = []
+            
+            for ms in milestones:
+                ms_copy = ms.copy()
+                
+                # Critical Alignment: Map "text" to "name" for goal_tracker_ui compatibility
+                if "text" in ms_copy and "name" not in ms_copy:
+                    ms_copy["name"] = ms_copy["text"]
+                
+                # Evaluate process state flow mechanics
+                if ms_copy["id"] == active_milestone_id:
+                    ms_copy["status"] = "active"
+                elif int(ms_copy["id"][1:]) < int(active_milestone_id[1:]):
+                    ms_copy["status"] = "completed"
+                else:
+                    ms_copy["status"] = "pending"
+                mutated_milestones.append(ms_copy)
+            
+            # Construct a layout schema structure matching goal_tracker_ui expectations
+            temp_manifest_data = {
+                "metadata": {"title": manifest_data.get("title", "ECONOMIC ENGINE")},
+                "milestones": mutated_milestones
+            }
+            
+            # Write out the temporary file on disk
+            temp_manifest_path = os.path.join(base_dir, "data", f"temp_manifest_{scene_id}.json")
+            with open(temp_manifest_path, 'w', encoding='utf-8') as temp_f:
+                json.dump(temp_manifest_data, temp_f, indent=2)
+            
+            # --- PART C: EXECUTE THE HUD IMAGE DRAW ---
+            output_hud_path = os.path.join(base_dir, "data", f"milestone_hud_{scene_id}.png")
+            
+            # Pass the manifest path string and output location directly
+            generate_polished_hud(temp_manifest_path, output_hud_path)
+            
+            # Clean up the temporary structural file to keep the folder clean
+            try:
+                os.remove(temp_manifest_path)
+            except OSError:
+                pass
+                
+        print("\n[SUCCESS] Fresh narration tracks and dynamic HUD layouts locked down.")
+    except Exception as err:
+        print(f"[CRITICAL FAILURE] Asset pipeline assembly failed: {str(err)}")
         sys.exit(1)
 
     # ==============================================================================
     # PHASE 2: GENERATE THE DYNAMIC VISUAL CHART SEQUENCE
     # ==============================================================================
-    print("\n=== GENERATING TELEMETRY VISUAL FRAMES ===")
+    print("\n=== GENERATING ECONOMICS TELEMETRY VISUAL FRAMES ===")
     try:
-        # Load data values dynamically from the manifest contract
-        act2 = next(item for item in manifest_data["timeline"] if item["act"] == 2)
-        act3 = next(item for item in manifest_data["timeline"] if item["act"] == 3)
-        overlay = act3["data_overlays"][0]
+        from src.chart_overlay_engine import TelemetryChartEngine
         
-        # Calculate exactly how long the chart sequence needs to play across both acts
-        chart_start_time = act2["start_time"]       # 15.0
-        chart_end_time = act3["end_time"]           # 50.0
-        total_chart_duration = chart_end_time - chart_start_time # Exactly 35 seconds
+        # 1. Initialize the engine to write directly to our Episode 3 directory
+        chart_dir = os.path.join(base_dir, "data", "charts_ep3")
+        chart_engine = TelemetryChartEngine(output_dir=chart_dir)
         
-        # Calculate exactly when the visual spike should occur
-        # Trigger time is 38.0. Chart starts at 15.0. 38.0 - 15.0 = 23.0 seconds!
-        visual_anomaly_second = overlay["trigger_time"] - chart_start_time
+        # 2. Recreate the chronological step matrix to match our 33.43-second timeline duration
+        total_steps = 35 
+        anomaly_index = 15  # Day 15 is where the chokepoint closes and rates spike
         
-        # Construct the DataFrame step matrix dynamically
-        total_steps = int(total_chart_duration) # 35 tracking steps
-        anomaly_index = int(visual_anomaly_second) # Index 23
-        
-        # Build clean date ranges spanning the precise duration
         dates = pd.date_range(start="2026-06-01", periods=total_steps, freq='D')
-        
         np.random.seed(42)
-        base_costs = 150.0 + np.random.normal(0, 4, total_steps)
+        base_rates = 1800.0 + np.random.normal(0, 15, total_steps)
         
-        # Plant the anomaly marker exactly where the manifest dictates
-        base_costs[anomaly_index] += 135.0  
+        # Apply the compounding freight rate curve post-shock
+        for t in range(total_steps):
+            if t >= anomaly_index:
+                time_elapsed = t - anomaly_index
+                base_rates[t] += 350 * (time_elapsed ** 1.3)
         
         telemetry_df = pd.DataFrame({
             'log_timestamp': dates,
-            'infrastructure_fee_usd': base_costs
+            'infrastructure_fee_usd': base_rates
         })
-        
         telemetry_df['is_anomaly'] = False
         telemetry_df.loc[anomaly_index, 'is_anomaly'] = True
         
-        # Run the visual renderer with 1 second per step to match the timeline layout
-        chart_engine = TelemetryChartEngine()
-        frames_dir = chart_engine.render_sequenced_frames(telemetry_df, fps=30, secs_per_day=1.0)
-        print(f"[SUCCESS] Visual sequence assets locked down inside: {frames_dir}")
+        # 3. Render out the frame array sequence
+        chart_engine.render_sequenced_frames(telemetry_df, fps=30, secs_per_day=1.0)
+        print(f"[SUCCESS] Visual sequence assets locked down inside: {chart_dir}")
         
     except Exception as e:
         print(f"[CRITICAL FAILURE] Visual frame step crashed: {str(e)}")

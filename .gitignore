@@ -40,3 +40,8 @@ engineering_log.md
 # 5. Operating System Clutter
 .DS_Store
 Thumbs.db
+
+# Ignore generated video frames and chart assets
+data/charts_ep3/
+output/
+audio/narration/

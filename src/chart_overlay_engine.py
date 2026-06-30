@@ -1,4 +1,4 @@
-# chart_overlay_engine.py
+# src/chart_overlay_engine.py
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -13,13 +13,15 @@ class TelemetryChartEngine:
         plt.style.use('dark_background')
         
     def render_sequenced_frames(self, telemetry_df: pd.DataFrame, fps: int = 30, secs_per_day: float = 1.0):
-        print(f"[VISUAL] Generating sequenced chart frames at {fps} FPS...")
+        print(f"[VISUAL] Generating sequenced economic chart frames at {fps} FPS...")
         
-        # Clean old frame cache
+        # Clean old frame cache safely
         for f in os.listdir(self.output_dir):
             if f.endswith('.png'):
-                try: os.remove(os.path.join(self.output_dir, f))
-                except: pass
+                try: 
+                    os.remove(os.path.join(self.output_dir, f))
+                except: 
+                    pass
 
         total_days = len(telemetry_df)
         total_frames = int(total_days * secs_per_day * fps)
@@ -27,12 +29,16 @@ class TelemetryChartEngine:
         
         fig, ax = plt.subplots(figsize=(self.resolution[0]/self.dpi, self.resolution[1]/self.dpi), dpi=self.dpi)
         
-        # DYNAMIC FIX: Find exactly where the anomaly row is flagged
+        # Look for the economic shock event trigger point
         anomaly_rows = telemetry_df[telemetry_df['is_anomaly'] == True]
         anomaly_idx = anomaly_rows.index[0] if not anomaly_rows.empty else 9999
         
         min_date = telemetry_df['log_timestamp'].min()
         max_date = telemetry_df['log_timestamp'].max()
+
+        # Dynamic calculation of Y limits to adapt gracefully to global freight scale jumps
+        min_y = float(telemetry_df['infrastructure_fee_usd'].min() * 0.85)
+        max_y = float(telemetry_df['infrastructure_fee_usd'].max() * 1.15)
 
         for frame_idx in range(total_frames):
             ax.clear()
@@ -48,9 +54,9 @@ class TelemetryChartEngine:
             ax.spines['right'].set_visible(False)
             ax.grid(True, color='#2A2A35', linestyle='--', alpha=0.4)
             
-            # If our timeline timeline has crossed the anomaly day, shift color to cyan!
+            # Switch color scheme from calm cyan to high-alert crimson once the chokepoint closes
             has_anomaly_hit = current_day_idx >= anomaly_idx
-            line_color = '#00E5FF' if has_anomaly_hit else '#00FFCC' 
+            line_color = '#FF3366' if has_anomaly_hit else '#00E5FF' 
             
             if len(visible_data) > 0:
                 ax.plot(
@@ -62,7 +68,7 @@ class TelemetryChartEngine:
             
             current_active_row = telemetry_df.iloc[current_day_idx]
             node_radius = 15 if current_active_row['is_anomaly'] else 8
-            node_color = '#FF1111' if current_active_row['is_anomaly'] else '#00FFCC'
+            node_color = '#FF1111' if current_active_row['is_anomaly'] else '#00E5FF'
             
             ax.scatter(
                 current_active_row['log_timestamp'],
@@ -73,10 +79,11 @@ class TelemetryChartEngine:
             )
             
             ax.set_xlim(min_date, max_date)
-            ax.set_ylim(50, 400)
+            ax.set_ylim(min_y, max_y)
             
-            ax.set_title("CLOUD INFRASTRUCTURE FEE TELEMETRY (USD/DAY)", fontsize=16, color='#8E8E9F', pad=20, fontname="Courier New")
-            ax.set_ylabel("Daily Spend Rate ($)", fontsize=12, color='#8E8E9F', fontname="Courier New")
+            # Re-label typography for the Global Supply Shock scenario
+            ax.set_title("SYSTEMIC TELEMETRY: MARITIME CHOKEPOINT CAPACITY SHOCK", fontsize=16, color='#8E8E9F', pad=20, fontname="Courier New")
+            ax.set_ylabel("Global Container Freight Index ($ / FEU)", fontsize=12, color='#8E8E9F', fontname="Courier New")
             
             frame_path = os.path.join(self.output_dir, f"frame_{frame_idx:04d}.png")
             plt.savefig(frame_path, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')

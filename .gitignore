@@ -45,3 +45,6 @@ Thumbs.db
 data/charts_ep3/
 output/
 audio/narration/
+
+# Ignore internal repository inspection and diagnostic utilities
+inspect_repo.py

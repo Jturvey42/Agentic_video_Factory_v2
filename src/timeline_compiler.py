@@ -1,9 +1,15 @@
 # src/timeline_compiler.py
-import os, json, random, cv2
+import os
+import glob
+import json
+import random
+import cv2
+import sys
 import numpy as np
 from moviepy.editor import (
+    ImageSequenceClip,
     AudioFileClip, CompositeAudioClip, CompositeVideoClip, 
-    VideoFileClip, ColorClip, ImageClip
+    VideoFileClip, ColorClip, ImageClip, TextClip
 )
 from pathlib import Path
 
@@ -11,8 +17,9 @@ class MoviePyTimelineCompiler:
     def __init__(self, episode_num: int):
         self.episode_num = episode_num
         self.src_dir = os.path.dirname(os.path.abspath(__file__))        
-        self.base_dir = os.path.dirname(self.src_dir)                                         
-        self.manifest_path = os.path.join(self.base_dir, f"video_manifest_ep{self.episode_num}.json")
+        self.base_dir = os.path.dirname(self.src_dir)
+        self.manifest_path = os.path.join(self.base_dir, "video_manifest_ep3_test.json")
+        # self.manifest_path = os.path.join(self.base_dir, f"video_manifest_ep{self.episode_num}.json")
         with open(self.manifest_path, 'r', encoding='utf-8') as f: 
             self.manifest = json.load(f)
         self.is_legacy_schema = "timeline" in self.manifest
@@ -51,78 +58,131 @@ class MoviePyTimelineCompiler:
                 staged_clips.append(bg_clip.volumex(0.05).set_start(0.0))
         return CompositeAudioClip(staged_clips), current_offset
 
-    def process_scene_clips(self) -> tuple:
-        visual_stack = []
-        meta_block = self.manifest.get("settings", {})
-        fps = meta_block["fps"]
-        target_resolution = tuple(meta_block["resolution"])
-        frame_dir = os.path.join(self.base_dir, "data", "charts_ep3")
-        temp_chart_video = os.path.join(self.base_dir, "output", f"temp_ep{self.episode_num}_charts.mp4")
-        charts_compiled = False
-        current_visual_timeline_pointer, chart_video_marker = 0.0, 0.0
-        narration_dir = Path(__file__).resolve().parent.parent / "audio" / "narration"
-
-        for idx, clip_data in enumerate(self.manifest["scenes"]):
-            scene_id = clip_data["scene_id"]
-            wav_path = narration_dir / f"ep3_{scene_id}_narration.wav"
+    def process_scene_clips(self, scene_data, headline_text, is_final_scene=False, audio_tail_pad_seconds=1.5):
+        """
+        Stitches scene assets into a dynamic layout. Protects against short audio
+        tracks by dynamically scaling the layout states to prevent negative durations.
+        """
+        # 1. Asset Verification & Audio Initialization
+        audio_path = scene_data['audio_path']
+        if not os.path.exists(audio_path):
+            print(f"[-] ERROR: Audio asset missing at {audio_path}")
+            sys.exit(1)
             
-            # Explicitly capture real duration or default
-            duration = AudioFileClip(str(wav_path)).duration if wav_path.exists() else 10.0
-            start_time = current_visual_timeline_pointer
-            
-            visual_layers = clip_data.get("visual_layers", {})
-            layout_mode = visual_layers.get("layout_mode", "content_focus")
-            source_path = os.path.join(self.base_dir, visual_layers.get("background", ""))
+        audio_clip = AudioFileClip(audio_path)
+        base_duration = audio_clip.duration
+        
+        # Calculate complete scene duration
+        total_duration = base_duration + audio_tail_pad_seconds if is_final_scene else base_duration
 
-            if os.path.exists(source_path) and source_path.endswith('.mp4'):
-                video_clip = VideoFileClip(source_path)
-                if video_clip.duration < duration:
-                    from moviepy.video.fx.loop import loop
-                    video_layer = loop(video_clip, duration=duration).resize(target_resolution)
-                else: 
-                    video_layer = video_clip.subclip(0, duration).resize(target_resolution)
-            else: 
-                video_layer = ColorClip(size=target_resolution, color=(24, 24, 27)).set_duration(duration)
-            
-            video_layer = video_layer.set_start(start_time).set_duration(duration)
-            visual_stack.append(video_layer)
+        # Safeguard: Ensure the scene is long enough to show both stages. Min floor = 8.0s
+        if total_duration < 8.0:
+            total_duration = 8.0
 
-            hud_image_path = os.path.join(self.base_dir, "data", f"milestone_hud_{scene_id}.png")
-            if layout_mode == "checklist_focus":
-                if os.path.exists(hud_image_path):
-                    visual_stack.append(ImageClip(hud_image_path).set_start(start_time).set_duration(duration).resize(target_resolution).set_position(('center', 'center')))
+        # 2. Dynamic Base Canvas Generation
+        bg_clip = ColorClip(size=(1920, 1080), color=(26, 26, 26)).set_duration(total_duration)
+
+        # 3. State A: Introductory Checklist Layout Initialization
+        # Explicitly define intro_duration first to prevent 'NameError'
+        intro_duration = 6.0
+        
+        hud_path = scene_data['hud_overlay_path']
+        hud_intro = ImageClip(hud_path) \
+            .set_duration(intro_duration) \
+            .resize(width=1600) \
+            .set_position(('center', 'center'))
+        
+        # 4. Data Stage State Timeline Setup
+        data_stage_start = intro_duration
+        data_stage_duration = total_duration - data_stage_start
+        
+        # 5. Top Headline Configuration (Pushed upward to clear chart space)
+        headline_clip = TextClip(
+            headline_text, 
+            fontsize=40, 
+            color='white', 
+            font='Arial-Bold',
+            size=(1920, 100)
+        ).set_start(data_stage_start).set_duration(data_stage_duration).set_position(('center', 30))
+
+        # 6. State B: Center Video/Chart Layer Sequence Handling
+        # Re-centered and scaled proportionally by height to protect Y-axis labels
+        chart_path = scene_data['chart_sequence_path']
+        if os.path.exists(chart_path):
+            frame_files = [os.path.join(chart_path, f) for f in sorted(os.listdir(chart_path)) if f.endswith('.png')]
+            
+            if not frame_files:
+                chart_sequence = None
             else:
-                if os.path.exists(frame_dir) and not charts_compiled:
-                    self._compile_frames_with_opencv(frame_dir, temp_chart_video, fps)
-                    charts_compiled = True
-                if os.path.exists(temp_chart_video):
-                    slice_start = chart_video_marker
-                    slice_end = chart_video_marker + duration
-                    with VideoFileClip(temp_chart_video) as ch_vid: 
-                        max_ch_dur = ch_vid.duration
-                    if slice_end > max_ch_dur: 
-                        slice_end = max_ch_dur
-                    if slice_end > slice_start:
-                        chart_layer = VideoFileClip(temp_chart_video).subclip(slice_start, slice_end).resize((1100, 618)).set_start(start_time).set_duration(slice_end - slice_start).set_position((700, 230))
-                        visual_stack.append(chart_layer)
-                        chart_video_marker += (slice_end - slice_start)
-                if os.path.exists(hud_image_path):
-                    visual_stack.append(ImageClip(hud_image_path).set_start(start_time).set_duration(duration).resize(target_resolution).set_position(('center', 'center')))
+                chart_sequence = ImageSequenceClip(frame_files, fps=30) \
+                    .set_start(data_stage_start) \
+                    .set_duration(data_stage_duration) \
+                    .resize(height=800) \
+                    .set_position(('center', 180))
+        else:
+            chart_sequence = None
 
-            current_visual_timeline_pointer += duration
-            
-        return visual_stack, current_visual_timeline_pointer
-   
+        # 7. Composite Stack Assembly
+        clip_stack = [bg_clip, headline_clip]
+        if chart_sequence:
+            clip_stack.append(chart_sequence)
+        clip_stack.append(hud_intro)
+
+        final_clip = CompositeVideoClip(clip_stack, size=(1920, 1080)).set_duration(total_duration)
+        return final_clip
+
     def execute_master_render(self, output_filename: str):
-        audio_mix, total_audio_duration = self.build_audio_mix()
-        visual_stack, total_visual_duration = self.process_scene_clips()
+        """
+        Stitches all visual scenes together sequentially using concatenate_videoclips
+        and pairs them perfectly with the master audio mix.
+        """
+        from moviepy.editor import concatenate_videoclips
+        
+        scenes = self.manifest.get("scenes", [])
+        total_scenes = len(scenes)
         meta_block = self.manifest["settings"]
         
-        # FIX: Align boundaries to the maximum track length + 1.5s clean tail pad
-        render_duration = max(total_audio_duration, total_visual_duration) + 1.5
+        processed_video_scenes = []
         
-        final_video = (CompositeVideoClip(visual_stack, size=tuple(meta_block["resolution"]))
-                       .set_audio(audio_mix)
-                       .set_duration(render_duration))
-                       
-        final_video.write_videofile(output_filename, fps=meta_block["fps"], codec="libx264", audio_codec="aac", threads=4, logger="bar")
+        # 1. Compile all individual visual scene clips
+        for idx, scene_data in enumerate(scenes):
+            is_final = (idx + 1 == total_scenes)
+            headline_text = scene_data.get("headline_text", "Data Telemetry Feed")
+            
+            scene_clip = self.process_scene_clips(
+                scene_data=scene_data, 
+                headline_text=headline_text, 
+                is_final_scene=is_final
+            )
+            processed_video_scenes.append(scene_clip)
+            
+        # 2. Concatenate ALL compiled visual scenes into one unified backbone timeline
+        full_visual_timeline = concatenate_videoclips(processed_video_scenes, method="compose")
+        video_duration = full_visual_timeline.duration
+        
+        # 3. Build and lock down the audio mix timeline
+        audio_mix, total_audio_duration = self.build_audio_mix()
+        audio_mix = audio_mix.set_duration(total_audio_duration)
+        
+        # 4. Final Padding Verification: Sync video container explicitly to master audio lengths
+        if total_audio_duration > video_duration:
+            padding_needed = total_audio_duration - video_duration
+            tail_padding = ColorClip(size=(1920, 1080), color=(26, 26, 26)) \
+                .set_start(video_duration) \
+                .set_duration(padding_needed)
+            final_video = CompositeVideoClip([full_visual_timeline, tail_padding]).set_duration(total_audio_duration)
+        else:
+            final_video = full_visual_timeline.set_duration(video_duration)
+
+        # 5. Fuse the final audio mix down to the compiled timeline
+        final_video = final_video.set_audio(audio_mix)
+        
+        # 6. Execute Multi-Threaded Production Render
+        final_video.write_videofile(
+            output_filename, 
+            fps=meta_block["fps"], 
+            codec="libx264", 
+            audio_codec="aac", 
+            threads=4, 
+            logger="bar"
+        )
